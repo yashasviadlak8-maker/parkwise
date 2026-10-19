@@ -1,0 +1,138 @@
+ParkWise DA3: Work Package C
+Module: Users, Vehicles, Scale and Justification | Technology: CockroachDB (Cloud-Native Distributed SQL) | Deadline: 23 October 2026
+1. What DA3 requires and how it is split
+The instructor's brief: re-implement the same mini-project on one modern database (not MongoDB) and justify the choice against a relational database. Deliverables: schema and model design, the implementation, sample datasets, a demonstration of core and technology-specific operations, a brief comparative analysis, the report and a live demo. Our choice is CockroachDB.
+The 17 tables are split into three modules, as in DA2. You are C. A owns infrastructure and geo-partitioning. B owns bookings, payments and the booking logic. Each module has its own tables, data, logic, demos, front-end page and report section, so nobody waits for anybody.
+Person
+Tables
+Data
+Demos
+Report section
+A
+zone_config, zone_peak_hour, parking_lot, parking_slot
+2,555 rows
+D1 SHOW RANGES, D2 follower read
+Schema design and partitioning; latency and geo-distribution
+B
+booking, payment, entry_exit_log, dispute, penalty_tier
+about 11,200 rows
+D3 concurrent booking, D4 node survival
+Booking logic; consistency and availability
+C
+user_master, registered_user, parking_attendant, admin_user, vehicle and its 4 subtype tables
+about 3,500 rows
+D5 distributed query plan, D6 online ALTER
+Introduction and justification; scale; comparison table; README
+Together the data is about 17,000 rows, above the 10,000 required.
+2. Shared contract (identical in all three documents, do not change)
+Stack: CockroachDB (self-hosted, local), Python 3.11 with psycopg v3 and Faker, and the Streamlit front end already in the repository. All three of you install the same CockroachDB version (brew install cockroachdb/tap/cockroach) and write it in the README. Run in insecure mode for the demo only.
+Cluster (every person runs their own copy; nobody shares a cluster). 5 nodes on one laptop, one per zone. For node n = 1 to 5 with zone names north, south, east, west, central:
+cockroach start --insecure --store=path=data/node<n> --listen-addr=localhost:<26256+n> --http-addr=localhost:<8079+n> --join=localhost:26257,localhost:26258,localhost:26259 --locality=zone=<name> --cache=128MiB --max-sql-memory=128MiB --pid-file=data/node<n>.pid --background cockroach init --insecure --host=localhost:26257        (once) cockroach sql --insecure --host=localhost:26257 -e 'CREATE DATABASE parkwise'
+Set CRDB_URL=postgresql://root@localhost:26257/parkwise?sslmode=disable. If 5 nodes are too heavy for your laptop, use 3 (north, south, east) and say so in your report. The DB Console is at http://localhost:8080.
+Licence check (first 15 minutes, each person): read the current licence page for your installed version and confirm that geo-partitioning and follower reads are allowed on the licence you have. If something is restricted, tell the team and the instructor before building on it.
+Conventions: table and column names exactly as in the Oracle script sql/01_schema.sql. Type mapping: NUMBER(p,s) to DECIMAL(p,s), VARCHAR2 to STRING, TIMESTAMP to TIMESTAMPTZ, SYSDATE to now(), flags to INT2 with CHECK (0,1). Surrogate keys are INT8 DEFAULT unique_rowid(); seed rows use the fixed ids below, so rows created in the front end never collide. CHECK and UNIQUE constraints are copied from the Oracle script. Each person works only in their own folder: cockroach/a_infrastructure/, cockroach/b_bookings/ or cockroach/c_users_vehicles/, containing 01_schema.sql, 03_logic.sql, data/, demos/, tests/ (A also has 02_partitioning.sql). Nobody edits another person's folder.
+Partitioning design (so the keys match without talking):
+	•	parking_lot: PRIMARY KEY (zone_id, lot_id). parking_slot: PRIMARY KEY (zone_id, slot_id) with a composite FK (zone_id, lot_id) to parking_lot. Both are partitioned BY LIST (zone_id): 1 north, 2 south, 3 east, 4 west, 5 central. This is module A.
+	•	booking has an extra column zone_id (the zone of its slot) and is not partitioned. This is module B.
+	•	parking_attendant has an extra column zone_id next to lot_id. This is module C.
+Fixed seed ids (TRD volumes):
+Table
+Ids
+Rule
+user_master
+1-1500
+1-1400 REGISTERED, 1401-1460 ATTENDANT, 1461-1500 ADMIN
+vehicle
+1-2000
+owner of vehicle v is user ((v-1) MOD 1400)+1; 1-1000 CAR, 1001-1500 BIKE, 1501-1700 TRUCK, 1701-2000 EV
+zone_config
+1-5
+1 NORTH, 2 SOUTH, 3 EAST, 4 WEST, 5 CENTRAL
+zone_peak_hour
+1-10
+two windows per zone
+parking_lot
+1-50
+lot l is in zone ((l-1) DIV 10)+1; managers are admins 1461-1500
+parking_slot
+1-2500
+slot s is in lot ((s-1) DIV 50)+1 and zone ((s-1) DIV 500)+1; position p = ((s-1) MOD 50)+1: p 1-30 STANDARD, 31-38 COMPACT, 39-46 LARGE, 47-50 EV
+booking / payment / entry_exit_log / dispute
+1-4000 / 1-4000 and up / 1-3000 / 1-200
+
+Cross-owner foreign keys: inside your CREATE TABLE reference only your own tables. Each owner puts their cross-owner FKs in 99_fk_<letter>.sql, run after all tables are loaded. A: parking_lot.manager_id to admin_user. B: booking user_id to registered_user, booking (vehicle_id, user_id) to vehicle (vehicle has UNIQUE (vehicle_id, user_id)), booking (zone_id, slot_id) to parking_slot, dispute raised_by to registered_user. C: parking_attendant (zone_id, lot_id) to parking_lot.
+Function contract: fn_calc_price(p_slot_id INT8, p_vehicle_type STRING, p_start TIMESTAMPTZ, p_end TIMESTAMPTZ) RETURNS DECIMAL is owned by A. fn_penalty(p_overstay_min INT8) RETURNS DECIMAL is owned by B. If you call one you do not own, write a stand-in with the same signature. Check whether your CockroachDB version supports functions, procedures and triggers; if it does not, implement the logic as Python functions with the same names and arguments in your own module file.
+Stub rule: to test alone, create stub parent tables with only the columns you read (listed in your section 3) and the fixed ids above. Never edit another person's real tables. Drop the stubs at merge.
+Front-end contract:
+	•	Everyone creates the identical file core/crdb.py (git merges identical files cleanly; if it complains, keep one copy):
+import os, re, time, psycopg from psycopg.rows import dict_row from psycopg import errors  def _sql(s):     return re.sub(r'(?<![:\w]):(\w+)', r'%(\1)s', s)  def run(sql, params=None, tries=5):     for i in range(tries):         try:             with psycopg.connect(os.environ['CRDB_URL'], row_factory=dict_row) as c:                 cur = c.execute(_sql(sql), params or {})                 rows = cur.fetchall() if cur.description else []             return rows         except errors.SerializationFailure:             time.sleep(0.05 * 2 ** i)     raise RuntimeError('still failing after retries (SQLSTATE 40001)')  def query(sql, p=None): return run(sql, p) def execute(sql, p=None): run(sql, p) def next_id(table, pk): return run('SELECT unique_rowid() AS n')[0]['n']
+	•	Everyone adds the identical lines at the very end of core/db.py:
+if os.getenv('CRDB_URL'):          # DA3: CockroachDB mode     from core.crdb import query, execute, next_id     MOCK = False
+	•	Your page uses only core/db functions plus your own wrapper module (core/infra_crdb.py for A, core/booking_crdb.py for B, core/users_crdb.py for C). In your page, import the wrapper only when CRDB_URL is set; otherwise keep the existing behaviour.
+	•	crdb.run is for single statements. A multi-statement transaction (a booking) needs its own with conn.transaction() block inside a retry loop on SerializationFailure. Never put a percent sign in SQL text; pass LIKE patterns as parameters.
+Merge (Wednesday 21 October, evening, together): create tables in the order A, C, B; load data in the order A, C, B; run the three 99_fk files; run the logic files; copy the pages and wrapper modules into one repository.
+Timeline:
+Day
+Work
+Sun 18
+Install, 5-node cluster, licence check, CRDB_URL, front-end contract files
+Mon 19
+Your schema and data generator, load and validate
+Tue 20
+Your logic and your front-end page on CockroachDB
+Wed 21
+Your demos, then the merge in the evening
+Thu 22
+Report sections, screenshots, rehearsal and a recorded fallback of all six demos
+Fri 23
+Deadline
+3. Your scope: Users, Vehicles, Scale and Justification
+3.1 Tables
+Port these nine tables from the Oracle script, with the same CHECK and UNIQUE constraints:
+	•	user_master: phone and email UNIQUE, user_type CHECK IN (REGISTERED, ATTENDANT, ADMIN).
+	•	registered_user (KYC status, wallet balance of 0 or more, default payment method), admin_user, and parking_attendant with the extra column zone_id next to lot_id (its FK to parking_lot goes in 99_fk_C.sql). The subtype tables reference user_master and cascade on delete.
+	•	vehicle: license_plate UNIQUE, vehicle_type CHECK IN (CAR, BIKE, TRUCK, EV), and UNIQUE (vehicle_id, user_id) because B's composite FK depends on it.
+	•	vehicle_car, and the bike, truck and electric vehicle subtype tables, each with their own attributes and a cascading FK to vehicle.
+Stubs for solo testing (revenue function only): zone_config(zone_id, zone_name), parking_slot(zone_id, slot_id, lot_id), booking(booking_id, zone_id, slot_id) and payment(payment_id, booking_id, amount, status, payment_timestamp) filled with about 10 hand-made rows, including a REFUNDED payment and a zone with no payments. Also a stub parking_lot(zone_id, lot_id) with ids 1-50 for the attendant FK.
+3.2 Data
+Write data/generate_c.py (Faker with a fixed seed, CSV output, load with COPY):
+	•	1,500 users by the id ranges in the contract: Indian names, 10-digit phone numbers, unique emails, created_at spread over the last year; 1,400 registered users (wallet 0 to 2,000, mixed KYC status), 60 attendants (lots 1-50 assigned in rotation, with zone_id from the lot rule), 40 admins.
+	•	2,000 vehicles following the owner and type ranges in the contract, plates like TN 22 AB 1234, about 80% verified, each with exactly one matching subtype row.
+Write tests/validate_c.sql: every user has exactly one matching subtype row (this proves the disjoint and total specialization), every vehicle has exactly one subtype row, and no duplicate phone, email or plate.
+3.3 Logic (03_logic.sql or core/users_crdb.py)
+	•	register_vehicle(user_id, plate, type, attr1, attr2, attr3): checks the user exists and is REGISTERED, checks the plate format ^[A-Z]{2} [0-9]{2} [A-Z]{1,3} [0-9]{4}$ after upper-casing, inserts the vehicle and its subtype row in one transaction (own conn.transaction() with a retry loop, as in the contract), and returns the new id.
+	•	topup_wallet(user_id, amount): amount must be positive and at most 10,000; the user must be REGISTERED with KYC VERIFIED; adds to the balance and returns it.
+	•	zone_monthly_revenue(zone, month, year): sum of SUCCESS payments through booking, slot, lot and zone, filtered by payment month and year, minus REFUNDED amounts in that month; returns 0 (not NULL) when empty.
+3.4 Demos
+Demo
+What to run
+What to show
+D5: distributed query plan
+ALTER TABLE vehicle SPLIT AT VALUES (500), (1000), (1500); then EXPLAIN (DISTSQL) SELECT vehicle_type, COUNT(*) FROM vehicle GROUP BY vehicle_type;
+The plan diagram shows the query running on several nodes; screenshot of the diagram link output, with one paragraph on what each stage does. After the merge, repeat it on a cross-zone revenue aggregate over the full data.
+D6: online schema change
+demos/load_users.py inserts users and vehicles continuously in the background; meanwhile run ALTER TABLE vehicle ADD COLUMN source STRING;
+The load keeps running with zero failed inserts while the column is added, with no table lock; show the load output and the new column. Compare in words with Oracle, where the same change needs a lock on the table.
+3.5 Front-end page (pages/3_Users_Vehicles.py)
+The page must work with CRDB_URL set: register a user (both inserts in one transaction), update KYC and wallet, delete a user (shows the cascade to the subtype row), register a vehicle through core/users_crdb.py, update verification, and delete a vehicle. Take screenshots of one insert, update and delete for each of the two entities, and of the revenue tab.
+3.6 Edge cases to demonstrate
+Duplicate phone, email and plate; wallet set negative; invalid user_type; a vehicle owned by a non-registered user; deleting a user that owns vehicles; lowercase and malformed plates; revenue for a zone with no payments.
+4. Your report section
+You also compile the final shared report and the README, so your section list is the longest. Write:
+	•	Introduction and justification: what ParkWise needs (no double booking across zones, low latency per zone, survival of node failure, event spikes, schema changes without downtime) and why a single Oracle node struggles with each. State the choice of the category, Cloud-Native Distributed SQL.
+	•	Schema design of your nine tables and the specialization mapping.
+	•	Data: generator, row counts, validation output (including the combined 10,000+ rows after the merge).
+	•	Demos D5 and D6 with screenshots and one paragraph each.
+	•	Comparative analysis, scale: horizontal scaling and automatic rebalancing for event traffic (add a node and show ranges rebalance in the DB Console, if time allows), compared with mostly vertical scaling on Oracle.
+	•	The comparison table (Traditional RDBMS versus NoSQL versus CockroachDB, across double booking, regional latency, node failure, scale for peaks, relational model, and complexity and cost). The Tech Stack document already has the table, so adapt it and keep the honest last row: CockroachDB adds write latency and operational complexity.
+	•	Front end on CockroachDB: screenshots of your page.
+	•	README: update it from DA2 to DA3 (cluster steps, CRDB_URL, how to load data, how to run each demo) and add a home-page screenshot.
+	•	Assembling the report: Aryan and Yashasvi send their sections by Thursday noon; you merge them, fix figure numbers, insert the table of contents and export to PDF.
+5. Your checklist
+	•	Licence confirmed, cluster up, CRDB_URL set, core/crdb.py and the db.py lines added.
+	•	Nine tables created and data loaded; validation passes.
+	•	register_vehicle, topup_wallet and zone_monthly_revenue tested against stubs.
+	•	D5 and D6 rehearsed, with a screen recording saved as a fallback.
+	•	Page 3 works in CockroachDB mode, with screenshots.
+	•	Report sections written, comparison table done, README updated.
+Your module has the most tables but the lightest logic, which is why you also own the final report. If time runs short, cut in this order: topup_wallet, the rebalancing screenshots, the edge-case list. Never cut D5, D6 or the data import.

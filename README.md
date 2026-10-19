@@ -1,5 +1,7 @@
 # ParkWise — Smart Parking & Reservation System
 
+Streamlit front end for the ParkWise Smart Parking & Reservation System (DBMS DA3).
+Shows insert, update and delete against the database, plus the stored procedures and functions.
 Streamlit front end and multi-engine database backend for the **ParkWise Smart Parking & Reservation System** (**DBMS DA2 & DA3**).
 
 The application supports three execution modes controlled via environment variables in `core/db.py`:
@@ -68,6 +70,24 @@ cockroach init --insecure --host=localhost:26257
 cockroach sql --insecure --host=localhost:26257 -e "CREATE DATABASE IF NOT EXISTS parkwise;"
 ```
 
+Create the empty `parkwise` repository on github.com first. `.env` is git-ignored, so passwords are never pushed.
+
+
+## DA3 Package C — Users, Vehicles, Scale and Justification
+
+CockroachDB setup and cluster scripts are under `cockroach/c_users_vehicles/`. Start the five-node cluster with `bash cockroach/c_users_vehicles/scripts/cluster_up.sh` and check it with `bash cockroach/c_users_vehicles/scripts/cluster_status.sh`.
+
+Set the application connection string with:
+
+```bash
+export CRDB_URL='postgresql://root@localhost:26257/parkwise?sslmode=disable'
+```
+
+Generate and load seed data using `python3 cockroach/c_users_vehicles/data/generate_c.py` and `python3 cockroach/c_users_vehicles/data/load_c.py`. Run the validation suite with `cockroach sql --insecure --host=localhost:26257 --database=parkwise < cockroach/c_users_vehicles/tests/validate_c.sql`. The latest run passed all 30 checks.
+
+Start the UI with `streamlit run app.py`; the Package C page is `pages/3_Users_Vehicles.py`. D5 evidence is in `cockroach/c_users_vehicles/demos/d5_distsql_plan.txt`; D6 workload and evidence are in `cockroach/c_users_vehicles/demos/load_users.py` and `cockroach/c_users_vehicles/demos/d6_evidence.txt`. The saved D6 evidence does not prove workload and schema change ran simultaneously.
+
+Stop the cluster with `bash cockroach/c_users_vehicles/scripts/cluster_down.sh`.
 ### 2. Load Schema, Logic & Bulk Data (Work Package B — Bookings, Payments, Logs & Disputes)
 
 ```bash

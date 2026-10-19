@@ -19,7 +19,8 @@ for env_path in [Path(".env"), Path(__file__).resolve().parent.parent / ".env"]:
                     k, v = line.split("=", 1)
                     os.environ.setdefault(k.strip(), v.strip())
 
-MOCK = not os.getenv("ORA_DSN")
+CRDB = bool(os.getenv("CRDB_URL"))
+MOCK = not os.getenv("ORA_DSN") and not CRDB
 _mock = None
 
 
@@ -38,6 +39,9 @@ def _conn():
 
 
 def query(sql, p=None):
+    if CRDB:
+        from core.crdb import query as crdb_query
+        return crdb_query(sql, p)
     c = _conn()
     try:
         cur = c.cursor()
@@ -50,6 +54,9 @@ def query(sql, p=None):
 
 
 def execute(sql, p=None):
+    if CRDB:
+        from core.crdb import execute as crdb_execute
+        return crdb_execute(sql, p)
     c = _conn()
     try:
         c.cursor().execute(sql, p or {})
@@ -63,7 +70,10 @@ def execute(sql, p=None):
 
 
 def next_id(table, pk):
-    """Oracle: seq_<table>.NEXTVAL (shared contract). Mock: MAX+1."""
+    """Oracle sequence, CockroachDB compatibility helper, or mock MAX+1."""
+    if CRDB:
+        from core.crdb import next_id as crdb_next_id
+        return crdb_next_id(table, pk)
     if MOCK:
         return query(f"SELECT COALESCE(MAX({pk}),0)+1 AS n FROM {table}")[0]["n"]
     return query(f"SELECT seq_{table}.NEXTVAL AS n FROM dual")[0]["n"]
@@ -172,4 +182,3 @@ def _make_mock():
 if os.getenv('CRDB_URL'):          # DA3: CockroachDB mode
     from core.crdb import query, execute, next_id
     MOCK = False
-

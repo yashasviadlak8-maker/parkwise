@@ -32,7 +32,7 @@ h1, h2, h3, .pw-word { font-family: 'Fredoka', sans-serif !important; letter-spa
 header[data-testid="stHeader"] { background: transparent; }
 [data-testid="stSidebar"] { background: #b9d4be; }
 .block-container { background: rgba(247,251,247,.88); border-radius: 20px; padding: 1.4rem 2.2rem 2rem; margin-top: 1rem; box-shadow: 0 6px 24px rgba(40,70,50,.15); }
-h1 { color: #1f4d33; border-bottom: 4px solid #D62828; display: inline-block; padding-bottom: 2px; }
+h1 { color: #1f4d33; display: inline-block; padding-bottom: 2px; }
 h2, h3 { color: #2b5f42; }
 /* tabs */
 button[data-baseweb="tab"] { font-family: 'Fredoka', sans-serif; font-size: 1.02rem; color: #3d6a4f; }
