@@ -1,6 +1,8 @@
 .env
 __pycache__/
 *.pyc
+*.pyo
+*.py[cod]
 .venv/
 
 # Local CockroachDB stores and PID files
@@ -11,10 +13,8 @@ data/node*.pid
 # Local workload logs
 d6_load.log
 
+# Generated Package B data
+cockroach/b_bookings/data/*.csv
+
 # macOS
 .DS_Store
-
-# Python / local environments
-__pycache__/
-*.py[cod]
-.venv/

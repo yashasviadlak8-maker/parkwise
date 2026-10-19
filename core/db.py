@@ -177,3 +177,8 @@ def _make_mock():
     """)
     c.commit()
     return c
+
+
+if os.getenv('CRDB_URL'):          # DA3: CockroachDB mode
+    from core.crdb import query, execute, next_id
+    MOCK = False
