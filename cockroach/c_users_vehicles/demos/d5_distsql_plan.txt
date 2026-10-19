@@ -1,0 +1,17 @@
+info
+distribution: full
+
+• group (hash)
+│ estimated row count: 4
+│ group by: vehicle_type
+│
+└── • scan
+"      estimated row count: 2,000 (100% of the table; stats collected 21 seconds ago; using stats forecast for 12 hours in the future)"
+"      table: vehicle@vehicle_pkey"
+"      spans: FULL SCAN"
+
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll9vokwUh-_fT0HOlb6BCAz4hyu7bXdjYrGrmN1mY8wUjkqKDMuM2zWN330DtquOCxHbppcwk2eeOefnwSfgPyNw4Pr7bf-i5yq1q97IG33t15XRdf_60lN-4SL0I5yKdYKq4rNVLGr_15XPw8HNy5ryZTgY3yqf7g42gwoxC9ClS-Tg_AADVCCgggUTFZKU-cg5S7Olp3xjL_gNjq5CGCcrkb2eqOCzFMF5AhGKCMEBj95HOEQaYNrIeAEKGkY5_vno7otC8oBrUOGSRatlzB1ZbZTQ7G3D1nWtYdi6DpONCmwldodzQecIjrFn27sCx9iopwtfzOcpzqlgacM69O1m_hfu3dQdeFN33O_XukY9Ex6MXW86HHwb1eqS0w57v1YWlC-OiJPNztuUvK1C7x13FbM0wBSDA3JOLblZ67SbjcY3057r1bqmfLGdNJGkW28r7TKNJY2OtPHfKpak0jlQMU4Pqv4WQdUaVTKqV3Hd6yT54IySQu_XZrT5fhltHkibpwfDfJMJlg0v7eRkmFVk9-pnf3Ay7ELv1yaj_X7JaFf5VAyRJyzmeNJw0qWTNCO7JQZz3JaEs1Xq423K_Hzv9nGQg_IXAXKxXTW2D734ZYmLFOny75dun2TIJGOf1DwgGfskqxrJLCa1qpE6xSRDl1FmaaFICYrIKFJec7246EdWVinKrkCyz23f0fXKSSXta1YjlbSvI5OaZ3fPlFGtUlS7uORHpPa5JberkUpK3q5GKvvFHA2Eztk1t7J5NYvY4zQMwAHTsuxAJ4Gmd6iuWaRFtHvS8jUfmyQwZmgRM_tvMovonGdDc7RgjznXWyfZyJvRiKMKN_QBr1BgugzjkIvQf17ZbP77EwAA__9RrjH3
+
+index recommendations: 1
+1. type: index creation
+"   SQL command: CREATE INDEX ON parkwise.public.vehicle (vehicle_type);"

@@ -1,0 +1,20 @@
+=== D6 workload ===
+Inserted users=480, vehicles=480, failed=0
+Inserted users=490, vehicles=490, failed=0
+Inserted users=500, vehicles=500, failed=0
+Inserted users=510, vehicles=510, failed=0
+LOAD_COMPLETE users=510 vehicles=510 failed=0
+
+=== Vehicle source column ===
+column_name	data_type	is_nullable	column_default	generation_expression	indices	is_hidden
+vehicle_id	INT8	f	unique_rowid()		{unq_vehicle_user,vehicle_license_plate_key,vehicle_pkey}	f
+user_id	INT8	f	NULL		{unq_vehicle_user,vehicle_pkey}	f
+license_plate	STRING(30)	f	NULL		{vehicle_license_plate_key,vehicle_pkey}	f
+registration_date	DATE	t	current_date()		{vehicle_pkey}	f
+is_verified	INT2	t	0		{vehicle_pkey}	f
+vehicle_type	STRING(20)	t	'CAR'		{vehicle_pkey}	f
+source	STRING	t	NULL		{vehicle_pkey}	f
+
+=== Schema change job ===
+job_id	job_type	description	status	fraction_completed	error
+1219887751506329601	NEW SCHEMA CHANGE	ALTER TABLE parkwise.public.vehicle ADD COLUMN source STRING	succeeded	1

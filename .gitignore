@@ -2,3 +2,19 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Local CockroachDB stores and PID files
+data/node*/
+data/cockroach-single/
+data/node*.pid
+
+# Local workload logs
+d6_load.log
+
+# macOS
+.DS_Store
+
+# Python / local environments
+__pycache__/
+*.py[cod]
+.venv/
